@@ -29,6 +29,8 @@ import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.DynamicModulesClassPathProvider;
 import org.gradle.api.internal.cache.StringInterner;
 import org.gradle.api.internal.changedetection.state.CachingFileSnapshotter;
+import org.gradle.api.internal.changedetection.state.ClasspathSnapshotter;
+import org.gradle.api.internal.changedetection.state.DefaultClasspathSnapshotter;
 import org.gradle.api.internal.changedetection.state.InMemoryTaskArtifactCache;
 import org.gradle.api.internal.changedetection.state.SoftInMemoryTaskArtifactCache;
 import org.gradle.api.internal.classpath.DefaultModuleRegistry;
@@ -48,7 +50,7 @@ import org.gradle.api.internal.hash.DefaultFileHasher;
 import org.gradle.api.internal.hash.FileHasher;
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderCache;
 import org.gradle.api.internal.initialization.loadercache.DefaultClassLoaderCache;
-import org.gradle.api.internal.initialization.loadercache.HashClassPathSnapshotter;
+import org.gradle.api.internal.initialization.loadercache.DefaultClasspathHasher;
 import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.api.tasks.util.internal.CachingPatternSpecFactory;
 import org.gradle.api.tasks.util.internal.PatternSets;
@@ -80,7 +82,7 @@ import org.gradle.internal.Factory;
 import org.gradle.internal.classloader.ClassLoaderFactory;
 import org.gradle.internal.classloader.ClassLoaderHasher;
 import org.gradle.internal.classloader.ClassLoaderHierarchyHasher;
-import org.gradle.internal.classloader.ClassPathSnapshotter;
+import org.gradle.internal.classloader.ClasspathHasher;
 import org.gradle.internal.classloader.DefaultHashingClassLoaderFactory;
 import org.gradle.internal.classloader.HashingClassLoaderFactory;
 import org.gradle.internal.classpath.ClassPath;
@@ -237,7 +239,7 @@ public class GlobalScopeServices {
         return new DefaultListenerManager();
     }
 
-    HashingClassLoaderFactory createClassLoaderFactory(ClassPathSnapshotter snapshotter) {
+    HashingClassLoaderFactory createClassLoaderFactory(ClasspathHasher snapshotter) {
         return new DefaultHashingClassLoaderFactory(snapshotter);
     }
 
@@ -313,8 +315,14 @@ public class GlobalScopeServices {
         return new ModelRuleExtractor(Iterables.concat(coreExtractors, extractors), managedProxyFactory, modelSchemaStore, structBindingsStore);
     }
 
-    ClassPathSnapshotter createClassPathSnapshotter(GradleBuildEnvironment environment, FileHasher hasher) {
-        return new HashClassPathSnapshotter(hasher);
+    ClasspathSnapshotter createClasspathSnapshotter(FileHasher hasher, StringInterner stringInterner, FileSystem fileSystem, DirectoryFileTreeFactory directoryFileTreeFactory, ListenerManager listenerManager) {
+        DefaultClasspathSnapshotter snapshotter = new DefaultClasspathSnapshotter(hasher, stringInterner, fileSystem, directoryFileTreeFactory);
+        listenerManager.addListener(snapshotter);
+        return snapshotter;
+    }
+
+    ClasspathHasher createClasspathHasher(GradleBuildEnvironment environment, ClasspathSnapshotter snapshotter) {
+        return new DefaultClasspathHasher(snapshotter);
     }
 
     MapBackedInMemoryStore createInMemoryStore() {
@@ -325,8 +333,8 @@ public class GlobalScopeServices {
         return new CachingFileSnapshotter(new DefaultFileHasher(), inMemoryStore, stringInterner);
     }
 
-    ClassLoaderCache createClassLoaderCache(HashingClassLoaderFactory classLoaderFactory, ClassPathSnapshotter classPathSnapshotter) {
-        return new DefaultClassLoaderCache(classLoaderFactory, classPathSnapshotter);
+    ClassLoaderCache createClassLoaderCache(HashingClassLoaderFactory classLoaderFactory, ClasspathHasher classpathHasher) {
+        return new DefaultClassLoaderCache(classLoaderFactory, classpathHasher);
     }
 
     protected ModelSchemaAspectExtractor createModelSchemaAspectExtractor(ServiceRegistry serviceRegistry) {
